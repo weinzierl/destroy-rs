@@ -1,0 +1,22 @@
+[package]
+name = "sprite_mover"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "0.18"
+
+# Speed up compile times in dev
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release-thin]
+inherits = "release"
+lto = "thin"
+
+[profile.release-fat]
+inherits = "release"
+lto = "fat"

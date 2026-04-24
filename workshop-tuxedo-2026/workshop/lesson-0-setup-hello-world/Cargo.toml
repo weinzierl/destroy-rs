@@ -1,0 +1,6 @@
+[package]
+name = "lesson-0-setup-hello-world"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
