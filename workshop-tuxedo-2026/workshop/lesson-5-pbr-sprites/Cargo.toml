@@ -1,7 +1,6 @@
 [package]
-name = "bevy_input_demo"
+name = "lesson-5-pbr-sprites"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.18"
