@@ -1,0 +1,13 @@
+CC0 1.0 Universal
+
+Unless otherwise noted, everything in the subdirectory tree rooted at this file
+is dedicated to the public domain under the Creative Commons CC0 1.0 Universal
+Public Domain Dedication.
+
+Files or directories with their own explicit license notice are governed by that
+notice instead.
+
+SPDX-License-Identifier: CC0-1.0
+
+Full license text:
+https://creativecommons.org/publicdomain/zero/1.0/
