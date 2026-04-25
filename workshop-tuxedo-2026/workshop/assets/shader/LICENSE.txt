@@ -1,0 +1,1 @@
+honeycomb.wsgl is Copyright Rafael Bachmann, 2026.
