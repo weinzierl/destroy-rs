@@ -1,223 +1,61 @@
-# ✨ Lektion 5 – PBR-Sprites
+# Bevy 0.18 PBR Sprite Demo
 
-> *"Licht macht aus einer Grafik eine Welt."*
+A minimal demonstration of physically-based rendering applied to flat sprite quads in Bevy 0.18, comparing how diffuse, normal, and combined textures interact with PBR lighting.
 
-Unsere Sprites sehen bisher gut aus – aber sie sind flach. Egal woher das Licht
-kommt, egal welche Atmosphäre wir erzeugen wollen: Ein normales Sprite ist immer
-gleichmäßig beleuchtet, immer gleich hell. In dieser Lektion fügen wir eine Dimension
-hinzu: **physikalisch basiertes Rendering** für 2D-Sprites.
+## Running
 
-Das Ergebnis ist bemerkenswert: Sprites, die auf Licht reagieren, Schatten werfen
-und eine Tiefe vermitteln, die weit über ihre zwei Dimensionen hinausgeht.
-
----
-
-## Was ist PBR – die Kurzfassung
-
-**Physically Based Rendering** (PBR) ist ein Rendering-Ansatz, der echte physikalische
-Lichtgesetze simuliert. Statt Licht fest in die Textur "einzubacken" (was bei normalen
-Sprites passiert), beschreiben wir die *Materialeigenschaften* der Oberfläche – und
-die Engine berechnet, wie Licht mit ihr interagiert.
-
-Die Details von PBR und wie man PBR-Sprites in Blender erstellt, erklärt
-[Intermission 1 – Sprites](../../intermissions/intermission-1-sprites/README.md).
-Hier konzentrieren wir uns auf die *Verwendung* in Bevy.
-
-Ein PBR-Sprite besteht aus mehreren Texturschichten:
-
-| Textur | Aufgabe |
-|--------|---------|
-| **Albedo (Color Map)** | Die Grundfarbe, ohne Beleuchtungseffekte |
-| **Normal Map** | Täuscht dreidimensionale Oberflächenstruktur vor |
-| **Roughness/Metallic Map** | Wie rau oder metallisch ist die Oberfläche? |
-| **Emissive Map** | Welche Teile leuchten selbst? |
-
----
-
-## PBR in 2D: Der Ansatz in Bevy
-
-Bevy ist primär eine 3D-Engine, die auch 2D sehr gut beherrscht. PBR-Sprites
-können auf zwei Wegen realisiert werden:
-
-**Weg A: 3D-Mesh mit 2D-Kameraprojektion.**
-Wir verwenden echte 3D-Objekte (flache Quads) mit `StandardMaterial`, platzieren
-sie in einer orthografischen 3D-Szene und rendern sie wie 2D. Das gibt uns das
-volle PBR-System von Bevy – inklusive dynamischer Lichter.
-
-**Weg B: Custom Shader für 2D-Sprites.**
-Mit einem eigenen WGSL-Shader können wir Normal Maps und Beleuchtung direkt
-auf die `Sprite`-Komponente anwenden, ohne den 3D-Renderer zu bemühen. Das ist
-eleganter, erfordert aber etwas mehr Shader-Wissen.
-
-Wir verwenden **Weg A** – er ist einfacher einzurichten und nutzt Bevys
-eingebautes PBR-System vollständig.
-
----
-
-## Eine PBR-Szene aufsetzen
-
-```rust
-use bevy::prelude::*;
-
-fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins)
-        .add_systems(Startup, setup)
-        .run();
-}
-
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    // Orthografische 3D-Kamera (statt Camera2d)
-    commands.spawn((
-        Camera3d::default(),
-        Projection::Orthographic(OrthographicProjection {
-            scaling_mode: bevy::render::camera::ScalingMode::FixedVertical {
-                viewport_height: 600.0,
-            },
-            ..OrthographicProjection::default_3d()
-        }),
-        Transform::from_xyz(0.0, 0.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
-
-    // Lichtquelle
-    commands.spawn((
-        PointLight {
-            intensity: 2_000_000.0,
-            color: Color::WHITE,
-            shadows_enabled: true,
-            ..default()
-        },
-        Transform::from_xyz(100.0, 200.0, 300.0),
-    ));
-
-    // Umgebungslicht (damit es nicht zu dunkel wird)
-    commands.insert_resource(AmbientLight {
-        color: Color::WHITE,
-        brightness: 200.0,
-    });
-
-    // Ein PBR-Sprite: flaches Quad mit Normal Map
-    let material = materials.add(StandardMaterial {
-        base_color_texture: Some(asset_server.load("sprites/block_albedo.png")),
-        normal_map_texture: Some(asset_server.load("sprites/block_normal.png")),
-        metallic: 0.0,
-        perceptual_roughness: 0.7,
-        ..default()
-    });
-
-    let mesh = meshes.add(Rectangle::new(60.0, 20.0));
-
-    commands.spawn((
-        Mesh3d(mesh),
-        MeshMaterial3d(material),
-        Transform::from_xyz(0.0, 100.0, 0.0),
-    ));
-}
+```bash
+cargo run
 ```
 
----
+Required assets in `assets/`:
 
-## Die Normal Map
+- `{prefix}diffuse.png` — flat albedo, no shading baked in
+- `{prefix}normal.png` — tangent-space normal map (OpenGL convention)
+- `{prefix}combined.png` — fully pre-lit reference sprite
+- `environment_maps/pisa_diffuse_rgb9e5_zstd.ktx2`
+- `environment_maps/pisa_specular_rgb9e5_zstd.ktx2`
 
-Die Normal Map ist das Herzstück des PBR-Sprite-Effekts. Sie ist ein Bild, in dem
-jeder Pixel keine Farbe, sondern eine *Richtung* speichert – die Richtung, in die
-die Oberfläche an diesem Punkt "zeigt". Die Kanäle R, G, B kodieren dabei X, Y und
-Z der Oberflächennormalen.
+The texture prefix is configured via the `SPRITE_PREFIX` constant at the top of `src/main.rs` (default: `"ball"`). Environment maps are from the official Bevy assets repo.
 
-Für Bevy wichtig: Normal Maps müssen im **Tangenten-Raum** vorliegen (was das
-Standard-Format für Spielentwicklung ist). Außerdem muss Bevy wissen, dass die
-Textur eine Normal Map ist und nicht als SRGB-Farbe interpretiert werden soll:
+## Scene
 
-```rust
-// Normal Maps NICHT als SRGB laden!
-let normal_handle: Handle<Image> = asset_server.load(
-    GltfAssetLabel::Primitive { mesh: 0, primitive: 0 }.from_asset("sprites/block_normal.png")
-);
-```
+A row of five quads sits on the equator with a chrome test sphere floating above them. A single point light orbits the row in the XY plane, and the camera has both an `EnvironmentMapLight` (for PBR reflections) and a `Skybox` (so you can see what's being reflected).
 
-In der Praxis ist es einfacher, die Normal Map über `StandardMaterial` zu laden –
-Bevy behandelt sie dann automatisch korrekt:
+### Test sphere (top)
 
-```rust
-StandardMaterial {
-    normal_map_texture: Some(asset_server.load("sprites/block_normal.png")),
-    // Bevy setzt automatisch das richtige Texturformat
-    ..default()
-}
-```
+Pure white metal, near-mirror finish (`metallic: 1.0`, `perceptual_roughness: 0.05`). No textures. Its only job is to verify that the environment map is loading — if you see the Pisa courtyard reflected here, IBL is working.
 
----
+### Sprite 1 — Diffuse + normal map (PBR)
 
-## Dynamische Lichter animieren
+The "correct" way to do a PBR sprite. The diffuse texture provides flat albedo; the normal map provides per-pixel surface direction. Lighting and reflections are computed by the shader and react to the orbiting light. Tangents are generated on the quad mesh so the normal map can be sampled correctly.
 
-Das Schöne an PBR ist, dass wir das Licht zur Laufzeit bewegen können – und die
-Sprites reagieren darauf sofort und korrekt.
+### Sprite 2 — Combined, unlit
 
-```rust
-#[derive(Component)]
-struct MovingLight;
+The pre-lit reference. `unlit: true` skips all PBR computation, so this sprite always looks identical regardless of light position. This is what a classic 2D sprite in a non-PBR engine looks like — useful as a baseline for comparison.
 
-fn animate_light(
-    time: Res<Time>,
-    mut query: Query<&mut Transform, With<MovingLight>>,
-) {
-    for mut transform in &mut query {
-        let t = time.elapsed_secs();
-        transform.translation.x = (t * 0.8).sin() * 300.0;
-        transform.translation.y = (t * 0.5).cos() * 200.0;
-    }
-}
-```
+### Sprite 3 — Diffuse only (PBR, no normal map)
 
-Das ist ein einfacher Effekt, der aber sofort zeigt, wie lebendig PBR-Sprites
-wirken können.
+Same diffuse texture as sprite 1, but without the normal map. The flat quad uniformly brightens and dims as the light orbits, with no surface relief. Demonstrates how much the normal map contributes — strip it out and the sprite looks like a flat decal.
 
----
+### Sprite 4 — Combined + normal map (PBR)
 
-## Spiellogik bleibt unberührt
+A "what not to do" example. The combined (already-lit) texture is fed to PBR as if it were albedo, with the normal map on top. The result has two layers of lighting fighting each other: baked highlights stay put while shader-computed highlights move with the light, and the shadowed sides go too dark. Shows why albedo and lighting must be separated for PBR.
 
-Ein wichtiger Punkt: Die gesamte Spiellogik aus Lektion 2 – Kollisionserkennung,
-Bewegung, Input – bleibt identisch. Wir ersetzen nur die Render-Komponenten:
+### Sprite 5 — Diffuse + normal map, max metallic (PBR)
 
-- Statt `Sprite` + `Camera2d` verwenden wir `Mesh3d` + `MeshMaterial3d` + `Camera3d`
-- Die `Transform`-Komponente ist in beiden Welten dieselbe
-- Alle anderen Components (Paddle, Ball, Block, Velocity) bleiben unverändert
+Same as sprite 1 but with `metallic: 1.0`. On a pure metal, the diffuse term vanishes and only specular reflections remain, tinted by the base color. The environment map shows up here, distorted by the normal map — bricks become a textured mirror.
 
-Das ist ECS in seiner schönsten Form: Systeme, die Logik implementieren, und
-Systeme, die Rendering implementieren, kennen einander nicht. Wir können zwischen
-beiden wechseln, ohne die Spielmechanik anzufassen.
+## Configuration
 
----
+Two constants at the top of `src/main.rs`:
 
-## Performance-Überlegungen
+- `SPRITE_PREFIX` — texture filename prefix (e.g. `"ball"`, `"brick3"`)
+- `PERCEPTUAL_ROUGHNESS` — surface roughness applied to all PBR sprites (0.0 = mirror, 1.0 = fully matte). Default `0.2` to keep reflections visible.
 
-PBR ist teurer als einfaches Sprite-Rendering. Für ein Breakout-Spiel mit wenigen
-Dutzend Objekten ist das absolut kein Problem. Aber es ist gut zu wissen:
+## Key technical notes
 
-- Jede zusätzliche Lichtquelle erhöht den Render-Aufwand spürbar.
-- `shadows_enabled: true` bei Lichtern ist teuer – sparsam einsetzen.
-- Normal Maps brauchen keine besondere Optimierung: Sie kosten fast nichts extra.
-
-Für ein Spielejam-Projekt ist "so viel PBR wie möglich" die richtige Einstellung.
-Für ein kommerzielles Spiel käme hier Profiling zum Einsatz.
-
----
-
-## Zusammenfassung
-
-In dieser Lektion haben wir:
-
-- Verstanden, was PBR-Sprites sind und warum sie besser aussehen
-- Eine orthografische 3D-Kamera als 2D-Ersatz eingerichtet
-- `StandardMaterial` mit Albedo- und Normal-Map-Texturen verwendet
-- Dynamische Lichter für lebendige Beleuchtung hinzugefügt
-- Gesehen, dass die Spiellogik von der Rendering-Entscheidung komplett getrennt ist
-
----
-
-*Weiter mit [Lektion 6 – Fortgeschrittenes Audio](../lesson-6-advanced-sound/README.md)*
+- **Tangents are required for normal maps.** `Plane3d` doesn't generate them; `mesh.generate_tangents()` is called explicitly.
+- **`AlphaMode::Mask(0.5)`** is used so transparent PNG pixels are discarded properly during the shadow pass, avoiding rectangular shadow artifacts.
+- **`NotShadowCaster`** is added to the sprites — flat quads casting shadows on themselves looks odd. Remove it if you want sprite-shaped shadows on the ground.
+- **An environment map is required for metallic surfaces to look correct.** Without one, pure metals appear black except where the point light hits them.
